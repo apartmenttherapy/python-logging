@@ -46,6 +46,7 @@ UNIT_TEST_EXTERNAL_DEPENDENCIES: List[str] = [
     "flask",
     "webob",
     "django",
+    "webapp2==3.0.0b1",
 ]
 UNIT_TEST_LOCAL_DEPENDENCIES: List[str] = []
 UNIT_TEST_DEPENDENCIES: List[str] = []
