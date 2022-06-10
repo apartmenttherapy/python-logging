@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import unittest
 
 import mock
@@ -22,6 +23,9 @@ _FLASK_HTTP_REQUEST = {"requestUrl": "https://flask.palletsprojects.com/en/1.1.x
 _DJANGO_TRACE_ID = "django0id"
 _DJANGO_SPAN_ID = "span0django"
 _DJANGO_HTTP_REQUEST = {"requestUrl": "https://www.djangoproject.com/"}
+_WEBAPP2_TRACE_ID = "webapp20id"
+_WEBAPP2_SPAN_ID = "span0webapp2"
+_WEBAPP2_HTTP_REQUEST = {"requestUrl": "https://webapp2.readthedocs.io/en/latest/"}
 
 
 class Test_get_request_data_from_flask(unittest.TestCase):
@@ -241,6 +245,113 @@ class Test_get_request_data_from_django(unittest.TestCase):
         self.assertEqual(http_request["requestMethod"], "PUT")
         self.assertEqual(http_request["requestUrl"], expected_path)
         self.assertEqual(http_request["protocol"], "HTTP/1.1")
+
+
+class Test_get_request_data_from_webapp2(unittest.TestCase):
+    @staticmethod
+    def create_app():
+        import webapp2
+
+        class TestHandler(webapp2.RequestHandler):
+            def get(self):
+                from google.cloud.logging_v2.handlers import _helpers
+
+                http, trace, span, sampled = _helpers.get_request_data_from_webapp2()
+
+                self.response.content_type = "application/json"
+                self.response.out.write(json.dumps([http, trace, span, sampled]))
+
+        app = webapp2.WSGIApplication([("/", TestHandler)], debug=True)
+
+        return app
+
+    def test_no_context_header(self):
+        import webob
+
+        req = webob.BaseRequest.blank("/")
+        response = req.get_response(self.create_app())
+
+        http_request, trace_id, span_id, sampled = json.loads(response.body)
+
+        self.assertEqual(None, trace_id)
+
+    def test_xcloud_header(self):
+        import webob
+
+        webapp2_trace_header = "X_CLOUD_TRACE_CONTEXT"
+        expected_trace_id = _WEBAPP2_TRACE_ID
+        expected_span_id = _WEBAPP2_SPAN_ID
+        webapp2_trace_id = f"{expected_trace_id}/{expected_span_id};o=1"
+
+        req = webob.BaseRequest.blank(
+            "/", headers={webapp2_trace_header: webapp2_trace_id}
+        )
+        response = req.get_response(self.create_app())
+
+        http_request, trace_id, span_id, sampled = json.loads(response.body)
+
+        self.assertEqual(trace_id, expected_trace_id)
+        self.assertEqual(span_id, expected_span_id)
+        self.assertEqual(sampled, True)
+        self.assertEqual(http_request["requestMethod"], "GET")
+
+    def test_traceparent_header(self):
+        import webob
+
+        webapp2_trace_header = "TRACEPARENT"
+        expected_trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+        expected_span_id = "00f067aa0ba902b7"
+        webapp2_trace_id = f"00-{expected_trace_id}-{expected_span_id}-01"
+
+        req = webob.BaseRequest.blank(
+            "/", headers={webapp2_trace_header: webapp2_trace_id}
+        )
+        response = req.get_response(self.create_app())
+
+        http_request, trace_id, span_id, sampled = json.loads(response.body)
+
+        self.assertEqual(trace_id, expected_trace_id)
+        self.assertEqual(span_id, expected_span_id)
+        self.assertEqual(sampled, True)
+        self.assertEqual(http_request["requestMethod"], "GET")
+
+    def test_http_request_populated(self):
+        import webob
+
+        expected_path = "http://localhost/"
+        expected_agent = "Mozilla/5.0"
+        expected_referrer = "self"
+        expected_ip = "10.1.2.3"
+        headers = {
+            "User-Agent": expected_agent,
+            "Referer": expected_referrer,
+        }
+
+        req = webob.BaseRequest.blank(
+            '/', headers=headers, environ={"REMOTE_ADDR": expected_ip}
+        )
+        response = req.get_response(self.create_app())
+
+        http_request, *_ = json.loads(response.body)
+
+        self.assertEqual(http_request["requestMethod"], "GET")
+        self.assertEqual(http_request["requestUrl"], expected_path)
+        self.assertEqual(http_request["userAgent"], expected_agent)
+        self.assertEqual(http_request["protocol"], "HTTP/1.0")
+
+    def test_http_request_sparse(self):
+        import webob
+
+        expected_path = "http://localhost/"
+
+        req = webob.BaseRequest.blank("/")
+        response = req.get_response(self.create_app())
+
+        http_request, *_ = json.loads(response.body)
+
+        self.assertEqual(http_request["requestMethod"], "GET")
+        self.assertEqual(http_request["requestUrl"], expected_path)
+        self.assertEqual(http_request["protocol"], "HTTP/1.0")
 
 
 class Test_get_request_data(unittest.TestCase):

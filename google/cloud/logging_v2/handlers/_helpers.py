@@ -24,6 +24,11 @@ try:
 except ImportError:  # pragma: NO COVER
     flask = None
 
+try:
+    import webapp2
+except (ImportError, SyntaxError):  # pragma: NO COVER
+    webapp2 = None
+
 from google.cloud.logging_v2.handlers.middleware.request import _get_django_request
 
 _DJANGO_CONTENT_LENGTH = "CONTENT_LENGTH"
@@ -34,6 +39,8 @@ _DJANGO_REMOTE_ADDR_HEADER = "REMOTE_ADDR"
 _DJANGO_REFERER_HEADER = "HTTP_REFERER"
 _FLASK_XCLOUD_TRACE_HEADER = "X_CLOUD_TRACE_CONTEXT"
 _FLASK_TRACEPARENT = "TRACEPARENT"
+_WEBAPP2_XCLOUD_TRACE_HEADER = "X-CLOUD-TRACE-CONTEXT"
+_WEBAPP2_TRACEPARENT = "TRACEPARENT"
 _PROTOCOL_HEADER = "SERVER_PROTOCOL"
 
 
@@ -66,7 +73,7 @@ def get_request_data_from_flask():
     Returns:
         Tuple[Optional[dict], Optional[str], Optional[str], bool]:
             Data related to the current http request, trace_id, span_id and trace_sampled
-            for the request. All fields will be None if a django request isn't found.
+            for the request. All fields will be None if a flask request isn't found.
     """
     if flask is None or not flask.request:
         return None, None, None, False
@@ -119,6 +126,45 @@ def get_request_data_from_django():
     if trace_id is None:
         # traceparent not found. look for xcloud_trace_context header
         header = request.META.get(_DJANGO_XCLOUD_TRACE_HEADER)
+        trace_id, span_id, trace_sampled = _parse_xcloud_trace(header)
+
+    return http_request, trace_id, span_id, trace_sampled
+
+
+def get_request_data_from_webapp2():
+    """Get http_request and trace data from webapp2 request headers.
+
+    Returns:
+        Tuple[Optional[dict], Optional[str], Optional[str], bool]:
+            Data related to the current http request, trace_id, span_id and trace_sampled
+            for the request. All fields will be None if a webapp2 request isn't found.
+    """
+    if webapp2 is None:
+        return None, None, None, False
+
+    try:
+        # get_request() succeeds if we're in the middle of a webapp2
+        # request, or raises an assertion error otherwise:
+        # "Request global variable is not set".
+        req = webapp2.get_request()
+    except AssertionError:
+        return None, None, None, False
+
+    # build http_request
+    http_request = {
+        "requestMethod": req.method,
+        "requestUrl": req.url,
+        "userAgent": req.user_agent,
+        "protocol": req.http_version,
+    }
+
+    # find trace id and span id
+    # first check for w3c traceparent header
+    header = req.headers.get(_WEBAPP2_TRACEPARENT)
+    trace_id, span_id, trace_sampled = _parse_trace_parent(header)
+    if trace_id is None:
+        # traceparent not found. look for xcloud_trace_context header
+        header = req.headers.get(_WEBAPP2_XCLOUD_TRACE_HEADER)
         trace_id, span_id, trace_sampled = _parse_xcloud_trace(header)
 
     return http_request, trace_id, span_id, trace_sampled
@@ -196,6 +242,7 @@ def get_request_data():
     checkers = (
         get_request_data_from_django,
         get_request_data_from_flask,
+        get_request_data_from_webapp2,
     )
 
     for checker in checkers:
