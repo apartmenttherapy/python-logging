@@ -95,11 +95,11 @@ templated_files = gcp.CommonTemplates().py_library(
         "opentelemetry-sdk"
     ],
     system_test_python_versions=["3.12"],
-    unit_test_external_dependencies=["flask", "webob", "django"],
+    unit_test_external_dependencies=["flask", "webob", "django","webapp2==3.0.0b1"],
     samples=True,
 )
 
-s.move(templated_files, 
+s.move(templated_files,
     excludes=[
         "docs/index.rst",
         ".github/release-please.yml",
