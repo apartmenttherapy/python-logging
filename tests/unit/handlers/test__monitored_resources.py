@@ -352,8 +352,15 @@ class Test_Resource_Detection(unittest.TestCase):
         (
             _monitored_resources._GAE_RESOURCE_TYPE,
             {},
-            {"_trace": "trace_id"},
-            {_monitored_resources._GAE_TRACE_ID_LABEL: "trace_id"},
+            {
+                "_trace": "trace_id",
+                "_resource_id": "resource_id",
+                "_request_id": "request_id",
+            },
+            {
+                _monitored_resources._GAE_TRACE_ID_LABEL: "trace_id",
+                _monitored_resources._GAE_REQUEST_ID_LABEL: "request_id",
+            },
         ),
         (
             _monitored_resources._CLOUD_RUN_JOB_RESOURCE_TYPE,

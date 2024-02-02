@@ -76,7 +76,8 @@ _CLOUD_RUN_JOB_RESOURCE_TYPE = "cloud_run_job"
 """Resource type for Cloud Run Jobs."""
 
 _GAE_TRACE_ID_LABEL = "appengine.googleapis.com/trace_id"
-"""Extra trace label to be added on App Engine environments"""
+_GAE_REQUEST_ID_LABEL = "appengine.googleapis.com/request_id"
+"""Extra labels to be added on App Engine environments"""
 
 _CLOUD_RUN_JOBS_EXECUTION_NAME_LABEL = "run.googleapis.com/execution_name"
 _CLOUD_RUN_JOBS_TASK_INDEX_LABEL = "run.googleapis.com/task_index"
@@ -299,5 +300,7 @@ def add_resource_labels(resource: Resource, record: logging.LogRecord):
     # Add labels from log record
     if resource.type == _GAE_RESOURCE_TYPE and record._trace is not None:
         labels[_GAE_TRACE_ID_LABEL] = record._trace
+        # add GAE-specific label
+        labels[_GAE_REQUEST_ID_LABEL] = record._request_id or ""
 
     return labels

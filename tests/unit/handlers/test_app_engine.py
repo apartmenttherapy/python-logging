@@ -104,7 +104,7 @@ class TestAppEngineHandler(unittest.TestCase):
         expected_trace_id = f"projects/{self.PROJECT}/traces/{trace_id}"
         get_request_patch = mock.patch(
             "google.cloud.logging_v2.handlers.app_engine.get_request_data",
-            return_value=(expected_http_request, trace_id, None, None),
+            return_value=(expected_http_request, None, trace_id, None, None),
         )
         with get_request_patch, pytest.warns(
             DeprecationWarning,
@@ -132,6 +132,7 @@ class TestAppEngineHandler(unittest.TestCase):
                     message,
                     gae_resource,
                     gae_labels,
+                    None,
                     expected_trace_id,
                     None,
                     expected_http_request,
@@ -145,7 +146,7 @@ class TestAppEngineHandler(unittest.TestCase):
         inferred_trace_id = "trace-test"
         get_request_patch = mock.patch(
             "google.cloud.logging_v2.handlers.app_engine.get_request_data",
-            return_value=(inferred_http_request, inferred_trace_id, None, None),
+            return_value=(inferred_http_request, None, inferred_trace_id, None, None),
         )
         with get_request_patch, pytest.warns(
             DeprecationWarning,
@@ -162,6 +163,8 @@ class TestAppEngineHandler(unittest.TestCase):
             )
             handler.project_id = self.PROJECT
             # set attributes manually
+            expected_request_id = "987"
+            setattr(record, "request_id", expected_request_id)
             expected_trace = "123"
             setattr(record, "trace", expected_trace)
             expected_span = "456"
@@ -184,16 +187,17 @@ class TestAppEngineHandler(unittest.TestCase):
                     message,
                     expected_resource,
                     expected_labels,
+                    expected_request_id,
                     expected_trace,
                     expected_span,
                     expected_http,
                 ),
             )
 
-    def _get_gae_labels_helper(self, trace_id):
+    def _get_gae_labels_helper(self, request_id, trace_id):
         get_request_patch = mock.patch(
             "google.cloud.logging_v2.handlers.app_engine.get_request_data",
-            return_value=(None, trace_id, None, None),
+            return_value=(None, request_id, trace_id, None, None),
         )
 
         client = mock.Mock(project=self.PROJECT, spec=["project"])
@@ -210,12 +214,16 @@ class TestAppEngineHandler(unittest.TestCase):
         from google.cloud.logging_v2.handlers import app_engine
 
         trace_id = "test-gae-trace-id"
+        request_id = "test-gae-request-id"
         with pytest.warns(
             DeprecationWarning,
             match="AppEngineHandler is deprecated. Use CloudLoggingHandler instead",
         ):
-            gae_labels = self._get_gae_labels_helper(trace_id)
-        expected_labels = {app_engine._TRACE_ID_LABEL: trace_id}
+            gae_labels = self._get_gae_labels_helper(request_id, trace_id)
+        expected_labels = {
+            app_engine._TRACE_ID_LABEL: trace_id,
+            app_engine._REQUEST_ID_LABEL: request_id,
+        }
         self.assertEqual(gae_labels, expected_labels)
 
     def test_get_gae_labels_without_label(self):
@@ -223,7 +231,7 @@ class TestAppEngineHandler(unittest.TestCase):
             DeprecationWarning,
             match="AppEngineHandler is deprecated. Use CloudLoggingHandler instead",
         ):
-            gae_labels = self._get_gae_labels_helper(None)
+            gae_labels = self._get_gae_labels_helper(None, None)
         self.assertEqual(gae_labels, {})
 
 
@@ -232,12 +240,23 @@ class _Transport(object):
         self.client = client
         self.name = name
 
-    def send(self, record, message, resource, labels, trace, span_id, http_request):
+    def send(
+        self,
+        record,
+        message,
+        resource,
+        labels,
+        request_id,
+        trace,
+        span_id,
+        http_request,
+    ):
         self.send_called_with = (
             record,
             message,
             resource,
             labels,
+            request_id,
             trace,
             span_id,
             http_request,
