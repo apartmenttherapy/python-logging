@@ -40,6 +40,7 @@ _DJANGO_REFERER_HEADER = "HTTP_REFERER"
 _FLASK_XCLOUD_TRACE_HEADER = "X_CLOUD_TRACE_CONTEXT"
 _FLASK_TRACEPARENT = "TRACEPARENT"
 _WEBAPP2_XCLOUD_TRACE_HEADER = "X-CLOUD-TRACE-CONTEXT"
+_WEBAPP2_REQUEST_ID_HEADER = "X-APPENGINE-REQUEST-LOG-ID"
 _WEBAPP2_TRACEPARENT = "TRACEPARENT"
 _PROTOCOL_HEADER = "SERVER_PROTOCOL"
 
@@ -76,7 +77,7 @@ def get_request_data_from_flask():
             for the request. All fields will be None if a flask request isn't found.
     """
     if flask is None or not flask.request:
-        return None, None, None, False
+        return None, None, None, None, False
 
     # build http_request
     http_request = {
@@ -95,7 +96,7 @@ def get_request_data_from_flask():
         header = flask.request.headers.get(_FLASK_XCLOUD_TRACE_HEADER)
         trace_id, span_id, trace_sampled = _parse_xcloud_trace(header)
 
-    return http_request, trace_id, span_id, trace_sampled
+    return http_request, None, trace_id, span_id, trace_sampled
 
 
 def get_request_data_from_django():
@@ -109,7 +110,7 @@ def get_request_data_from_django():
     request = _get_django_request()
 
     if request is None:
-        return None, None, None, False
+        return None, None, None, None, False
 
     # Django can raise django.core.exceptions.DisallowedHost here for a
     # malformed HTTP_HOST header. But we don't want to import Django modules.
@@ -135,7 +136,7 @@ def get_request_data_from_django():
         header = request.META.get(_DJANGO_XCLOUD_TRACE_HEADER)
         trace_id, span_id, trace_sampled = _parse_xcloud_trace(header)
 
-    return http_request, trace_id, span_id, trace_sampled
+    return http_request, None, trace_id, span_id, trace_sampled
 
 
 def get_request_data_from_webapp2():
@@ -147,7 +148,7 @@ def get_request_data_from_webapp2():
             for the request. All fields will be None if a webapp2 request isn't found.
     """
     if webapp2 is None:
-        return None, None, None, False
+        return None, None, None, None, False
 
     try:
         # get_request() succeeds if we're in the middle of a webapp2
@@ -155,7 +156,7 @@ def get_request_data_from_webapp2():
         # "Request global variable is not set".
         req = webapp2.get_request()
     except AssertionError:
-        return None, None, None, False
+        return None, None, None, None, False
 
     # build http_request
     http_request = {
@@ -164,6 +165,8 @@ def get_request_data_from_webapp2():
         "userAgent": req.user_agent,
         "protocol": req.http_version,
     }
+
+    request_id = req.headers.get(_WEBAPP2_REQUEST_ID_HEADER)
 
     # find trace id and span id
     # first check for w3c traceparent header
@@ -174,7 +177,7 @@ def get_request_data_from_webapp2():
         header = req.headers.get(_WEBAPP2_XCLOUD_TRACE_HEADER)
         trace_id, span_id, trace_sampled = _parse_xcloud_trace(header)
 
-    return http_request, trace_id, span_id, trace_sampled
+    return http_request, request_id, trace_id, span_id, trace_sampled
 
 
 def _parse_trace_parent(header):
@@ -253,8 +256,8 @@ def get_request_data():
     )
 
     for checker in checkers:
-        http_request, trace_id, span_id, trace_sampled = checker()
+        http_request, request_id, trace_id, span_id, trace_sampled = checker()
         if http_request is not None:
-            return http_request, trace_id, span_id, trace_sampled
+            return http_request, request_id, trace_id, span_id, trace_sampled
 
-    return None, None, None, False
+    return None, None, None, None, False

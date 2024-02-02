@@ -372,8 +372,8 @@ class Test_get_request_data(unittest.TestCase):
     def _call_fut():
         from google.cloud.logging_v2.handlers import _helpers
 
-        http, trace, span, sampled = _helpers.get_request_data()
-        return http, trace, span, sampled
+        http, request_id, trace, span, sampled = _helpers.get_request_data()
+        return http, request_id, trace, span, sampled
 
     def _helper(self, django_return, flask_return):
         django_patch = mock.patch(

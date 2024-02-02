@@ -36,8 +36,10 @@ EXCLUDED_LOGGER_DEFAULTS = (
 """These environments require us to remove extra handlers on setup"""
 _CLEAR_HANDLER_RESOURCE_TYPES = ("gae_app", "cloud_function")
 
-"""Extra trace label to be added on App Engine environments"""
+"""Extra labels to be added on App Engine environments"""
 _GAE_TRACE_ID_LABEL = "appengine.googleapis.com/trace_id"
+_GAE_REQUEST_ID_LABEL = "appengine.googleapis.com/request_id"
+
 
 """Resource name for App Engine environments"""
 _GAE_RESOURCE_TYPE = "gae_app"
@@ -84,6 +86,7 @@ class CloudLoggingFilter(logging.Filter):
         # infer request data from the environment
         (
             inferred_http,
+            inferred_request_id,
             inferred_trace,
             inferred_span,
             inferred_sampled,
@@ -94,6 +97,7 @@ class CloudLoggingFilter(logging.Filter):
         # set new record values
         record._resource = getattr(record, "resource", None)
         record._trace = getattr(record, "trace", inferred_trace) or None
+        record._request_id = getattr(record, "request_id", inferred_request_id) or None
         record._span_id = getattr(record, "span_id", inferred_span) or None
         record._trace_sampled = bool(getattr(record, "trace_sampled", inferred_sampled))
         record._http_request = getattr(record, "http_request", inferred_http)
@@ -203,7 +207,11 @@ class CloudLoggingHandler(logging.StreamHandler):
 
         if resource.type == _GAE_RESOURCE_TYPE and record._trace is not None:
             # add GAE-specific label
-            labels = {_GAE_TRACE_ID_LABEL: record._trace, **(labels or {})}
+            labels = {
+                _GAE_TRACE_ID_LABEL: record._trace,
+                _GAE_REQUEST_ID_LABEL: record._request_id or "",
+                **(labels or {}),
+            }
         # send off request
         self.transport.send(
             record,

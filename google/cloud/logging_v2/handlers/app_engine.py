@@ -36,6 +36,7 @@ _GAE_SERVICE_ENV = "GAE_SERVICE"
 _GAE_VERSION_ENV = "GAE_VERSION"
 
 _TRACE_ID_LABEL = "appengine.googleapis.com/trace_id"
+_REQUEST_ID_LABEL = "appengine.googleapis.com/request_id"
 
 _DEPRECATION_MSG = "AppEngineHandler is deprecated. Use CloudLoggingHandler instead."
 
@@ -98,9 +99,10 @@ class AppEngineHandler(logging.StreamHandler):
         """
         gae_labels = {}
 
-        _, trace_id, _, _ = get_request_data()
+        _, trace_id, request_id, _, _ = get_request_data()
         if trace_id is not None:
             gae_labels[_TRACE_ID_LABEL] = trace_id
+            gae_labels[_REQUEST_ID_LABEL] = request_id
 
         return gae_labels
 
@@ -115,11 +117,12 @@ class AppEngineHandler(logging.StreamHandler):
             record (logging.LogRecord): The record to be logged.
         """
         message = super(AppEngineHandler, self).format(record)
-        inferred_http, inferred_trace, _, _ = get_request_data()
+        inferred_http, inferred_request_id, inferred_trace, _, _ = get_request_data()
         if inferred_trace is not None:
             inferred_trace = f"projects/{self.project_id}/traces/{inferred_trace}"
         # allow user overrides
         trace = getattr(record, "trace", inferred_trace)
+        trace = getattr(record, "request_id", inferred_request_id)
         span_id = getattr(record, "span_id", None)
         http_request = getattr(record, "http_request", inferred_http)
         resource = getattr(record, "resource", self.resource)
