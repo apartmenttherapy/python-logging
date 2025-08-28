@@ -35,7 +35,9 @@ _DJANGO_SPAN_ID_XCTC_DEC = "54321"
 _DJANGO_SPAN_ID_XCTC_HEX = "d431".zfill(16)
 _DJANGO_HTTP_REQUEST = {"requestUrl": "https://www.djangoproject.com/"}
 _WEBAPP2_TRACE_ID = "webapp20id"
-_WEBAPP2_SPAN_ID = "span0webapp2"
+# _WEBAPP2_SPAN_ID = "span0webapp2"
+_WEBAPP2_SPAN_ID = "123"  # must be an integer
+_WEBAPP2_REQUEST_ID = "requestid0webapp2"
 _WEBAPP2_HTTP_REQUEST = {"requestUrl": "https://webapp2.readthedocs.io/en/latest/"}
 
 
@@ -44,8 +46,8 @@ class Test_get_request_data_from_flask(unittest.TestCase):
     def _call_fut():
         from google.cloud.logging_v2.handlers import _helpers
 
-        http, trace, span, sampled = _helpers.get_request_data_from_flask()
-        return http, trace, span, sampled
+        http, request_id, trace, span, sampled = _helpers.get_request_data_from_flask()
+        return http, request_id, trace, span, sampled
 
     @staticmethod
     def create_app():
@@ -62,7 +64,7 @@ class Test_get_request_data_from_flask(unittest.TestCase):
     def test_no_context_header(self):
         app = self.create_app()
         with app.test_request_context(path="/", headers={}):
-            http_request, trace_id, span_id, sampled = self._call_fut()
+            http_request, request_id, trace_id, span_id, sampled = self._call_fut()
 
         self.assertIsNone(trace_id)
         self.assertIsNone(span_id)
@@ -82,7 +84,7 @@ class Test_get_request_data_from_flask(unittest.TestCase):
         )
 
         with context:
-            http_request, trace_id, span_id, sampled = self._call_fut()
+            http_request, request_id, trace_id, span_id, sampled = self._call_fut()
 
         self.assertEqual(trace_id, expected_trace_id)
         self.assertEqual(span_id, expected_span_id)
@@ -101,7 +103,7 @@ class Test_get_request_data_from_flask(unittest.TestCase):
         )
 
         with context:
-            http_request, trace_id, span_id, sampled = self._call_fut()
+            http_request, request_id, trace_id, span_id, sampled = self._call_fut()
 
         self.assertEqual(trace_id, expected_trace_id)
         self.assertEqual(span_id, expected_span_id)
@@ -144,8 +146,8 @@ class Test_get_request_data_from_django(unittest.TestCase):
     def _call_fut():
         from google.cloud.logging_v2.handlers import _helpers
 
-        http, trace, span, sampled = _helpers.get_request_data_from_django()
-        return http, trace, span, sampled
+        http, request_id, trace, span, sampled = _helpers.get_request_data_from_django()
+        return http, request_id, trace, span, sampled
 
     def setUp(self):
         from django.conf import settings
@@ -170,7 +172,7 @@ class Test_get_request_data_from_django(unittest.TestCase):
 
         middleware = request.RequestMiddleware(None)
         middleware(django_request)
-        http_request, trace_id, span_id, sampled = self._call_fut()
+        http_request, request_id, trace_id, span_id, sampled = self._call_fut()
 
         self.assertEqual(http_request["requestMethod"], "GET")
         self.assertIsNone(trace_id)
@@ -193,7 +195,7 @@ class Test_get_request_data_from_django(unittest.TestCase):
 
         middleware = request.RequestMiddleware(None)
         middleware(django_request)
-        http_request, trace_id, span_id, sampled = self._call_fut()
+        http_request, request_id, trace_id, span_id, sampled = self._call_fut()
 
         self.assertEqual(trace_id, expected_trace_id)
         self.assertEqual(span_id, expected_span_id)
@@ -213,7 +215,7 @@ class Test_get_request_data_from_django(unittest.TestCase):
 
         middleware = request.RequestMiddleware(None)
         middleware(django_request)
-        http_request, trace_id, span_id, sampled = self._call_fut()
+        http_request, request_id, trace_id, span_id, sampled = self._call_fut()
 
         self.assertEqual(trace_id, expected_trace_id)
         self.assertEqual(span_id, expected_span_id)
@@ -282,10 +284,18 @@ class Test_get_request_data_from_webapp2(unittest.TestCase):
             def get(self):
                 from google.cloud.logging_v2.handlers import _helpers
 
-                http, trace, span, sampled = _helpers.get_request_data_from_webapp2()
+                (
+                    http,
+                    request_id,
+                    trace,
+                    span,
+                    sampled,
+                ) = _helpers.get_request_data_from_webapp2()
 
                 self.response.content_type = "application/json"
-                self.response.out.write(json.dumps([http, trace, span, sampled]))
+                self.response.out.write(
+                    json.dumps([http, request_id, trace, span, sampled])
+                )
 
         app = webapp2.WSGIApplication([("/", TestHandler)], debug=True)
 
@@ -297,27 +307,35 @@ class Test_get_request_data_from_webapp2(unittest.TestCase):
         req = webob.BaseRequest.blank("/")
         response = req.get_response(self.create_app())
 
-        http_request, trace_id, span_id, sampled = json.loads(response.body)
+        http_request, request_id, trace_id, span_id, sampled = json.loads(response.body)
 
         self.assertEqual(None, trace_id)
 
-    def test_xcloud_header(self):
+    def test_xcloud_headers(self):
         import webob
 
-        webapp2_trace_header = "X_CLOUD_TRACE_CONTEXT"
+        webapp2_trace_header = "X-CLOUD-TRACE-CONTEXT"
+        webapp2_request_id_header = "X-APPENGINE-REQUEST-LOG-ID"
         expected_trace_id = _WEBAPP2_TRACE_ID
         expected_span_id = _WEBAPP2_SPAN_ID
         webapp2_trace_id = f"{expected_trace_id}/{expected_span_id};o=1"
+        webapp2_request_id = _WEBAPP2_REQUEST_ID
+        expected_request_id = webapp2_request_id
 
         req = webob.BaseRequest.blank(
-            "/", headers={webapp2_trace_header: webapp2_trace_id}
+            "/",
+            headers={
+                webapp2_trace_header: webapp2_trace_id,
+                webapp2_request_id_header: webapp2_request_id,
+            },
         )
         response = req.get_response(self.create_app())
 
-        http_request, trace_id, span_id, sampled = json.loads(response.body)
+        http_request, request_id, trace_id, span_id, sampled = json.loads(response.body)
 
         self.assertEqual(trace_id, expected_trace_id)
-        self.assertEqual(span_id, expected_span_id)
+        self.assertEqual(span_id, f"{int(expected_span_id):016x}")
+        self.assertEqual(request_id, expected_request_id)
         self.assertEqual(sampled, True)
         self.assertEqual(http_request["requestMethod"], "GET")
 
@@ -334,7 +352,7 @@ class Test_get_request_data_from_webapp2(unittest.TestCase):
         )
         response = req.get_response(self.create_app())
 
-        http_request, trace_id, span_id, sampled = json.loads(response.body)
+        http_request, request_id, trace_id, span_id, sampled = json.loads(response.body)
 
         self.assertEqual(trace_id, expected_trace_id)
         self.assertEqual(span_id, expected_span_id)
@@ -354,7 +372,7 @@ class Test_get_request_data_from_webapp2(unittest.TestCase):
         }
 
         req = webob.BaseRequest.blank(
-            '/', headers=headers, environ={"REMOTE_ADDR": expected_ip}
+            "/", headers=headers, environ={"REMOTE_ADDR": expected_ip}
         )
         response = req.get_response(self.create_app())
 
@@ -385,8 +403,8 @@ class Test_get_request_data(unittest.TestCase):
     def _call_fut():
         from google.cloud.logging_v2.handlers import _helpers
 
-        http, trace, span, sampled = _helpers.get_request_data()
-        return http, trace, span, sampled
+        http, request_id, trace, span, sampled = _helpers.get_request_data()
+        return http, request_id, trace, span, sampled
 
     def _helper(self, django_return, flask_return):
         django_patch = mock.patch(
@@ -407,6 +425,7 @@ class Test_get_request_data(unittest.TestCase):
     def test_from_django(self):
         django_expected = (
             _DJANGO_HTTP_REQUEST,
+            None,
             _DJANGO_TRACE_ID,
             _DJANGO_SPAN_ID,
             False,
@@ -419,8 +438,14 @@ class Test_get_request_data(unittest.TestCase):
         flask_mock.assert_not_called()
 
     def test_from_flask(self):
-        django_expected = (None, None, None, False)
-        flask_expected = (_FLASK_HTTP_REQUEST, _FLASK_TRACE_ID, _FLASK_SPAN_ID, False)
+        django_expected = (None, None, None, None, False)
+        flask_expected = (
+            _FLASK_HTTP_REQUEST,
+            None,
+            _FLASK_TRACE_ID,
+            _FLASK_SPAN_ID,
+            False,
+        )
 
         django_mock, flask_mock, output = self._helper(django_expected, flask_expected)
         self.assertEqual(output, flask_expected)
@@ -431,11 +456,18 @@ class Test_get_request_data(unittest.TestCase):
     def test_from_django_and_flask(self):
         django_expected = (
             _DJANGO_HTTP_REQUEST,
+            None,
             _DJANGO_TRACE_ID,
             _DJANGO_SPAN_ID,
             False,
         )
-        flask_expected = (_FLASK_HTTP_REQUEST, _FLASK_TRACE_ID, _FLASK_SPAN_ID, False)
+        flask_expected = (
+            _FLASK_HTTP_REQUEST,
+            None,
+            _FLASK_TRACE_ID,
+            _FLASK_SPAN_ID,
+            False,
+        )
 
         django_mock, flask_mock, output = self._helper(django_expected, flask_expected)
 
@@ -446,19 +478,19 @@ class Test_get_request_data(unittest.TestCase):
         flask_mock.assert_not_called()
 
     def test_missing_http_request(self):
-        flask_expected = (None, _FLASK_TRACE_ID, _FLASK_SPAN_ID, True)
-        django_expected = (None, _DJANGO_TRACE_ID, _DJANGO_TRACE_ID, True)
+        flask_expected = (None, None, _FLASK_TRACE_ID, _FLASK_SPAN_ID, True)
+        django_expected = (None, None, _DJANGO_TRACE_ID, _DJANGO_TRACE_ID, True)
         django_mock, flask_mock, output = self._helper(django_expected, flask_expected)
 
         # function only returns trace if http_request data is present
-        self.assertEqual(output, (None, None, None, False))
+        self.assertEqual(output, (None, None, None, None, False))
 
         django_mock.assert_called_once_with()
         flask_mock.assert_called_once_with()
 
     def test_missing_trace_id(self):
-        flask_expected = (_FLASK_HTTP_REQUEST, None, None, False)
-        django_expected = (None, _DJANGO_TRACE_ID, _DJANGO_SPAN_ID, True)
+        flask_expected = (_FLASK_HTTP_REQUEST, None, None, None, False)
+        django_expected = (None, None, _DJANGO_TRACE_ID, _DJANGO_SPAN_ID, True)
         django_mock, flask_mock, output = self._helper(django_expected, flask_expected)
 
         # trace_id is optional
@@ -468,27 +500,28 @@ class Test_get_request_data(unittest.TestCase):
         flask_mock.assert_called_once_with()
 
     def test_missing_both(self):
-        flask_expected = (None, None, None, False)
-        django_expected = (None, None, None, False)
+        flask_expected = (None, None, None, None, False)
+        django_expected = (None, None, None, None, False)
         django_mock, flask_mock, output = self._helper(django_expected, flask_expected)
-        self.assertEqual(output, (None, None, None, False))
+        self.assertEqual(output, (None, None, None, None, False))
 
         django_mock.assert_called_once_with()
         flask_mock.assert_called_once_with()
 
     def test_wo_libraries(self):
         output = self._call_fut()
-        self.assertEqual(output, (None, None, None, False))
+        self.assertEqual(output, (None, None, None, None, False))
 
     def test_otel_span_exists_no_request(self):
-        flask_expected = (None, None, None, False)
-        django_expected = (None, None, None, False)
+        flask_expected = (None, None, None, None, False)
+        django_expected = (None, None, None, None, False)
 
         with _setup_otel_span_context():
             _, _, output = self._helper(django_expected, flask_expected)
             self.assertEqual(
                 output,
                 (
+                    None,
                     None,
                     _EXPECTED_OTEL_TRACE_ID,
                     _EXPECTED_OTEL_SPAN_ID,
@@ -499,11 +532,12 @@ class Test_get_request_data(unittest.TestCase):
     def test_otel_span_exists_django_request(self):
         django_expected = (
             _DJANGO_HTTP_REQUEST,
+            None,
             _DJANGO_TRACE_ID,
             _DJANGO_SPAN_ID,
             False,
         )
-        flask_expected = (None, None, None, False)
+        flask_expected = (None, None, None, None, False)
 
         with _setup_otel_span_context():
             _, _, output = self._helper(django_expected, flask_expected)
@@ -511,6 +545,7 @@ class Test_get_request_data(unittest.TestCase):
                 output,
                 (
                     _DJANGO_HTTP_REQUEST,
+                    None,
                     _EXPECTED_OTEL_TRACE_ID,
                     _EXPECTED_OTEL_SPAN_ID,
                     _EXPECTED_OTEL_TRACESAMPLED,
@@ -518,8 +553,14 @@ class Test_get_request_data(unittest.TestCase):
             )
 
     def test_otel_span_exists_flask_request(self):
-        django_expected = (None, None, None, False)
-        flask_expected = (_FLASK_HTTP_REQUEST, _FLASK_TRACE_ID, _FLASK_SPAN_ID, False)
+        django_expected = (None, None, None, None, False)
+        flask_expected = (
+            _FLASK_HTTP_REQUEST,
+            None,
+            _FLASK_TRACE_ID,
+            _FLASK_SPAN_ID,
+            False,
+        )
 
         with _setup_otel_span_context():
             _, _, output = self._helper(django_expected, flask_expected)
@@ -527,6 +568,7 @@ class Test_get_request_data(unittest.TestCase):
                 output,
                 (
                     _FLASK_HTTP_REQUEST,
+                    None,
                     _EXPECTED_OTEL_TRACE_ID,
                     _EXPECTED_OTEL_SPAN_ID,
                     _EXPECTED_OTEL_TRACESAMPLED,
@@ -536,11 +578,18 @@ class Test_get_request_data(unittest.TestCase):
     def test_otel_span_exists_both_django_and_flask(self):
         django_expected = (
             _DJANGO_HTTP_REQUEST,
+            None,
             _DJANGO_TRACE_ID,
             _DJANGO_SPAN_ID,
             False,
         )
-        flask_expected = (_FLASK_HTTP_REQUEST, _FLASK_TRACE_ID, _FLASK_SPAN_ID, False)
+        flask_expected = (
+            _FLASK_HTTP_REQUEST,
+            None,
+            _FLASK_TRACE_ID,
+            _FLASK_SPAN_ID,
+            False,
+        )
 
         with _setup_otel_span_context():
             _, _, output = self._helper(django_expected, flask_expected)
@@ -550,6 +599,7 @@ class Test_get_request_data(unittest.TestCase):
                 output,
                 (
                     _DJANGO_HTTP_REQUEST,
+                    None,
                     _EXPECTED_OTEL_TRACE_ID,
                     _EXPECTED_OTEL_SPAN_ID,
                     _EXPECTED_OTEL_TRACESAMPLED,
@@ -557,25 +607,32 @@ class Test_get_request_data(unittest.TestCase):
             )
 
     def test_no_otel_span_no_requests(self):
-        flask_expected = (None, None, None, False)
-        django_expected = (None, None, None, False)
+        flask_expected = (None, None, None, None, False)
+        django_expected = (None, None, None, None, False)
         _, _, output = self._helper(django_expected, flask_expected)
-        self.assertEqual(output, (None, None, None, False))
+        self.assertEqual(output, (None, None, None, None, False))
 
     def test_no_otel_span_django_request(self):
         django_expected = (
             _DJANGO_HTTP_REQUEST,
+            None,
             _DJANGO_TRACE_ID,
             _DJANGO_SPAN_ID,
             False,
         )
-        flask_expected = (None, None, None, False)
+        flask_expected = (None, None, None, None, False)
         _, _, output = self._helper(django_expected, flask_expected)
         self.assertEqual(output, django_expected)
 
     def test_no_otel_span_flask_request(self):
-        django_expected = (None, None, None, False)
-        flask_expected = (_FLASK_HTTP_REQUEST, _FLASK_TRACE_ID, _FLASK_SPAN_ID, False)
+        django_expected = (None, None, None, None, False)
+        flask_expected = (
+            _FLASK_HTTP_REQUEST,
+            None,
+            _FLASK_TRACE_ID,
+            _FLASK_SPAN_ID,
+            False,
+        )
         _, _, output = self._helper(django_expected, flask_expected)
 
         # Django wins
@@ -584,11 +641,18 @@ class Test_get_request_data(unittest.TestCase):
     def test_no_otel_span_both_django_and_flask(self):
         django_expected = (
             _DJANGO_HTTP_REQUEST,
+            None,
             _DJANGO_TRACE_ID,
             _DJANGO_SPAN_ID,
             False,
         )
-        flask_expected = (_FLASK_HTTP_REQUEST, _FLASK_TRACE_ID, _FLASK_SPAN_ID, False)
+        flask_expected = (
+            _FLASK_HTTP_REQUEST,
+            None,
+            _FLASK_TRACE_ID,
+            _FLASK_SPAN_ID,
+            False,
+        )
         _, _, output = self._helper(django_expected, flask_expected)
 
         # Django wins

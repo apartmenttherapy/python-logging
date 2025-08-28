@@ -92,6 +92,7 @@ class CloudLoggingFilter(logging.Filter):
         # infer request data from the environment
         (
             inferred_http,
+            inferred_request_id,
             inferred_trace,
             inferred_span,
             inferred_sampled,
@@ -102,6 +103,7 @@ class CloudLoggingFilter(logging.Filter):
         # set new record values
         record._resource = getattr(record, "resource", None)
         record._trace = getattr(record, "trace", inferred_trace) or None
+        # record._request_id = getattr(record, "request_id", inferred_request_id) or None
         record._span_id = getattr(record, "span_id", inferred_span) or None
         record._trace_sampled = bool(getattr(record, "trace_sampled", inferred_sampled))
         record._http_request = getattr(record, "http_request", inferred_http)
@@ -227,6 +229,7 @@ class CloudLoggingHandler(logging.StreamHandler):
             message,
             resource=resource,
             labels=labels,
+            # request_id=record._request_id,
             trace=record._trace,
             span_id=record._span_id,
             trace_sampled=record._trace_sampled,

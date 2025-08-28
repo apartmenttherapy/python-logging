@@ -526,6 +526,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 message,
                 _GLOBAL_RESOURCE,
                 {"python_logger": logname},
+                # None,
                 None,
                 None,
                 False,
@@ -549,6 +550,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 record,
                 None,
                 _GLOBAL_RESOURCE,
+                # None,
                 None,
                 None,
                 None,
@@ -579,6 +581,8 @@ class TestCloudLoggingHandler(unittest.TestCase):
             logname, logging.INFO, None, None, message, None, None
         )
         # set attributes manually
+        expected_request_id = "987"
+        setattr(record, "request_id", expected_request_id)
         expected_trace = "123"
         setattr(record, "trace", expected_trace)
         expected_span = "456"
@@ -608,6 +612,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 message,
                 expected_resource,
                 expected_labels,
+                # expected_request_id,
                 expected_trace,
                 expected_span,
                 expected_sampled,
@@ -646,6 +651,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 expected_result,
                 _GLOBAL_RESOURCE,
                 expected_label,
+                # None,
                 None,
                 None,
                 False,
@@ -681,6 +687,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 message,
                 _GLOBAL_RESOURCE,
                 expected_label,
+                # None,
                 None,
                 None,
                 False,
@@ -718,6 +725,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 {"message": "message", "hello": "world"},
                 _GLOBAL_RESOURCE,
                 expected_label,
+                # None,
                 None,
                 None,
                 False,
@@ -758,6 +766,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 record,
                 json_fields,
                 _GLOBAL_RESOURCE,
+                # None,
                 None,
                 None,
                 None,
@@ -794,6 +803,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 expected_result,
                 _GLOBAL_RESOURCE,
                 expected_label,
+                # None,
                 None,
                 None,
                 False,
@@ -823,6 +833,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 message,
                 _GLOBAL_RESOURCE,
                 {"python_logger": logname},
+                # None,
                 None,
                 None,
                 False,
@@ -844,6 +855,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 message,
                 _GLOBAL_RESOURCE,
                 {"python_logger": logname},
+                # None,
                 None,
                 None,
                 False,
@@ -878,6 +890,7 @@ class TestCloudLoggingHandler(unittest.TestCase):
                 record,
                 expected_result,
                 _GLOBAL_RESOURCE,
+                # None,
                 None,
                 None,
                 None,
@@ -1222,6 +1235,7 @@ class _Transport(object):
         message,
         resource,
         labels=None,
+        # request_id=None,
         trace=None,
         span_id=None,
         trace_sampled=None,
@@ -1233,6 +1247,7 @@ class _Transport(object):
             message,
             resource,
             labels,
+            # request_id,
             trace,
             span_id,
             trace_sampled,
